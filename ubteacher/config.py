@@ -20,8 +20,8 @@ def add_ubteacher_config(cfg):
     _C.SOLVER.IMG_PER_BATCH_UNLABEL = 1
     _C.SOLVER.FACTOR_LIST = (1,)
 
-    _C.DATASETS.TRAIN_LABEL = ("coco_2017_train",)
-    _C.DATASETS.TRAIN_UNLABEL = ("coco_2017_train",)
+    _C.DATASETS.TRAIN_LABEL = ("my_dataset",)
+    _C.DATASETS.TRAIN_UNLABEL = ("my_dataset",)
     _C.DATASETS.CROSS_DATASET = False
     _C.TEST.EVALUATOR = "COCOeval"
 

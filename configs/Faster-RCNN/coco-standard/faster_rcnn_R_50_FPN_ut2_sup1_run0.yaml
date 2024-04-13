@@ -28,8 +28,8 @@ DATALOADER:
   RANDOM_DATA_SEED: 0
 DATASETS:
   CROSS_DATASET: False
-  TRAIN: ("coco_2017_train",)
-  TEST: ("coco_2017_val",)
+  TRAIN: ("my_dataset",)
+  TEST: ("my_dataset",)
 SEMISUPNET:
   Trainer: "ubteacher_rcnn"
   BBOX_THRESHOLD: 0.7
@@ -39,7 +39,7 @@ SEMISUPNET:
   UNSUP_LOSS_WEIGHT: 4.0
   UNSUP_REG_LOSS_WEIGHT: 1.0
 TEST:
-  EVAL_PERIOD: 3000
+  EVAL_PERIOD: 1000
   EVALUATOR: "COCOeval"
   VAL_LOSS: False
 INPUT: # scale jittering (follow soft teacher)

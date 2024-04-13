@@ -1,27 +1,32 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-import json
 import logging
-import operator
-
 import numpy as np
+import random
+import operator
+import json
 import torch.utils.data
-from detectron2.data.build import (
-    build_batch_data_loader,
-    get_detection_dataset_dicts,
-    trivial_batch_collator,
-    worker_init_reset_seed,
+from detectron2.utils.comm import get_world_size
+from detectron2.data.common import (
+    DatasetFromList,
+    MapDataset,
 )
-from detectron2.data.common import DatasetFromList, MapDataset
 from detectron2.data.dataset_mapper import DatasetMapper
 from detectron2.data.samplers import (
     InferenceSampler,
     RepeatFactorTrainingSampler,
     TrainingSampler,
 )
-from detectron2.utils.comm import get_world_size
-from detectron2.utils.file_io import PathManager
-from ubteacher.data.common import AspectRatioGroupedSemiSupDatasetTwoCrop
-
+from detectron2.data.build import (
+    trivial_batch_collator,
+    worker_init_reset_seed,
+    get_detection_dataset_dicts,
+    build_batch_data_loader,
+)
+from ubteacher.data.common import (
+    AspectRatioGroupedSemiSupDatasetTwoCrop,
+)
+from detectron2.data.datasets import register_coco_instances
+from detectron2.data import MetadataCatalog, DatasetCatalog
 """
 This file contains the default logic to build a dataloader for training or testing.
 """
@@ -32,29 +37,41 @@ def divide_label_unlabel(
 ):
     num_all = len(dataset_dicts)
     num_label = int(SupPercent / 100.0 * num_all)
-
     # read from pre-generated data seed
-    with PathManager.open(random_data_seed_path, "r") as COCO_sup_file:
-        coco_random_idx = json.load(COCO_sup_file)
 
-    labeled_idx = np.array(coco_random_idx[str(SupPercent)][str(random_data_seed)])
+    with open(random_data_seed_path) as see_file:
+         random_idx = json.load(see_file)
+    labeled_idx = np.array(random_idx[str(SupPercent)][str(random_data_seed)])
+    '''
+    all_idx = [i for i in range(num_all)]
+    labeled_idx = np.array(random.sample(all_idx, num_label))
+    dict = {str(SupPercent): {"1": labeled_idx.tolist()}}
+    with open('data.json', 'w') as outfile:
+        #outfile.write(",")
+        json.dump(dict, outfile)
+    '''
+    print("labeled id", labeled_idx)
     assert labeled_idx.shape[0] == num_label, "Number of READ_DATA is mismatched."
-
     label_dicts = []
     unlabel_dicts = []
     labeled_idx = set(labeled_idx)
-
     for i in range(len(dataset_dicts)):
         if i in labeled_idx:
+            print("value of index", i)
             label_dicts.append(dataset_dicts[i])
         else:
             unlabel_dicts.append(dataset_dicts[i])
-
     return label_dicts, unlabel_dicts
 
 
 # uesed by supervised-only baseline trainer
 def build_detection_semisup_train_loader(cfg, mapper=None):
+    register_coco_instances("my_dataset", {},
+                            "./datasets/coco/annotations/instances_train2017.json",
+                            "./datasets/coco/coco/train2017")
+    # dataset_dicts = DatasetCatalog.get("my_dataset")
+    MetadataCatalog.get("my_dataset").thing_classes = ["Grasper", "Bipolar", "Hook", "Scissors", "Clipper",
+                                                  "Irrigator", "SpecimenBag"]
 
     dataset_dicts = get_detection_dataset_dicts(
         cfg.DATASETS.TRAIN,
@@ -65,8 +82,15 @@ def build_detection_semisup_train_loader(cfg, mapper=None):
         proposal_files=cfg.DATASETS.PROPOSAL_FILES_TRAIN
         if cfg.MODEL.LOAD_PROPOSALS
         else None,
-    )
 
+    )
+    """
+    register_coco_instances("my_dataset", {}, "./datasets/coco/annotations/instances_train2017.json",
+                                            "./datasets/coco/train2017")
+    dataset_dicts = DatasetCatalog.get("my_dataset")
+    MetadataCatalog.get("my_test_set").thing_classes = ["Grasper", "Bipolar", "Hook", "Scissors", "Clipper",
+                                                        "Irrigator", "SpecimenBag"]
+    """
     # Divide into labeled and unlabeled sets according to supervision percentage
     label_dicts, unlabel_dicts = divide_label_unlabel(
         dataset_dicts,
@@ -112,6 +136,18 @@ def build_detection_semisup_train_loader(cfg, mapper=None):
 
 # uesed by evaluation
 def build_detection_test_loader(cfg, dataset_name, mapper=None):
+    print("starting validation loader")
+    data_name = 'my_test_set'
+    if data_name in DatasetCatalog.list():
+        DatasetCatalog.remove(data_name)
+
+    register_coco_instances("my_test_set", {},
+                            "./datasets/coco/annotations/instances_val2017.json",
+                           "./datasets/coco/datasets/coco/val2017")
+    # dataset_dicts = DatasetCatalog.get("my_test_set")
+    MetadataCatalog.get("my_test_set").thing_classes = ["Grasper", "Bipolar", "Hook", "Scissors", "Clipper",
+                                                       "Irrigator", "SpecimenBag"]
+
     dataset_dicts = get_detection_dataset_dicts(
         [dataset_name],
         filter_empty=False,
@@ -123,6 +159,7 @@ def build_detection_test_loader(cfg, dataset_name, mapper=None):
         if cfg.MODEL.LOAD_PROPOSALS
         else None,
     )
+
     dataset = DatasetFromList(dataset_dicts)
     if mapper is None:
         mapper = DatasetMapper(cfg, False)
@@ -164,6 +201,13 @@ def build_detection_semisup_train_loader_two_crops(cfg, mapper=None):
             else None,
         )
     else:  # different degree of supervision (e.g., COCO-supervision)
+        register_coco_instances("my_dataset", {},
+                                "./datasets/coco/annotations/instances_train2017.json",
+                                "./datasets/coco/train2017")
+        # dataset_dicts = DatasetCatalog.get("my_dataset")
+        MetadataCatalog.get("my_dataset").thing_classes = ["Grasper", "Bipolar", "Hook", "Scissors", "Clipper",
+                                                           "Irrigator", "SpecimenBag"]
+
         dataset_dicts = get_detection_dataset_dicts(
             cfg.DATASETS.TRAIN,
             filter_empty=cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS,
@@ -174,7 +218,14 @@ def build_detection_semisup_train_loader_two_crops(cfg, mapper=None):
             if cfg.MODEL.LOAD_PROPOSALS
             else None,
         )
-
+        '''
+        register_coco_instances("my_dataset", {},
+                                "./datasets/coco/annotations/instances_train2017.json",
+                                "./datasets/coco/train2017")
+        dataset_dicts = DatasetCatalog.get("my_dataset")
+        MetadataCatalog.get("my_dataset").thing_classes = ["Grasper", "Bipolar", "Hook", "Scissors", "Clipper",
+                                                           "Irrigator", "SpecimenBag"]
+        '''
         # Divide into labeled and unlabeled sets according to supervision percentage
         label_dicts, unlabel_dicts = divide_label_unlabel(
             dataset_dicts,
@@ -222,7 +273,7 @@ def build_semisup_batch_data_loader_two_crop(
     total_batch_size_unlabel,
     *,
     aspect_ratio_grouping=False,
-    num_workers=0,
+    num_workers=0
 ):
     world_size = get_world_size()
     assert (
