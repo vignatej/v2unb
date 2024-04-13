@@ -29,7 +29,7 @@ DATALOADER:
 DATASETS:
   CROSS_DATASET: False
   TRAIN: ("my_dataset",)
-  TEST: ("my_dataset",)
+  TEST: ("my_test_set",)
 SEMISUPNET:
   Trainer: "ubteacher_rcnn"
   BBOX_THRESHOLD: 0.7
